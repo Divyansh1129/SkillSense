@@ -1,69 +1,131 @@
-# SkillSense – Labour Market Intelligence System (SIH 2026, MSDE)
+# SkillSense
 
-Demand–supply gap forecasting for skilling planners: ingestion → NLP mapping → demand index → hierarchical forecast → gap/severity/early-warning → API + React dashboard (English / हिन्दी / मराठी).
+SkillSense is a labour market intelligence dashboard that helps skilling planners compare job demand with training capacity. It highlights possible skill shortages and surpluses, forecasts future gaps, and supports training-seat planning.
 
-> **ALL DATA IS SIMULATED.** Every screen shows a "Demo data (simulated)" banner. NCO codes, NSQF levels, SSC labels and district codes are illustrative and must be verified before any real use. Real feeds (NCS, e-Shram, PLFS, Skill India Digital) are documented connector interfaces with simulated implementations.
+> **Demo limitation:** All data in this project is simulated. Results demonstrate the system’s features and are not real labour market findings. Source labels and classification codes are illustrative and must be verified before real use.
 
-## Quick start (no Docker)
+## Features
 
-**Needs:** Python 3.11+ and Node 18+.
+- Explore demand and training supply by state, district, sector, and trade.
+- View forecasts up to 12 months ahead, with uncertainty ranges.
+- Rank skill shortages and oversupply areas.
+- See early warnings for acute shortages, emerging demand, oversupply risk, and low-confidence data.
+- Inspect demand contributors and confidence indicators.
+- Try training-seat changes and review suggested targets within a seat budget.
+- Export forecasts and target recommendations.
+- Use the dashboard in English, Hindi, or Marathi, with high contrast and adjustable text size.
+- Switch between Viewer, Analyst, and Admin roles. The role selector is a custom menu with keyboard support.
+
+## Tech stack
+
+- **Frontend:** React, TypeScript, Vite, Tailwind CSS, Plotly
+- **Backend:** FastAPI, SQLite, pandas
+- **Analysis:** Demand-index calculation, skill mapping, forecasting, gap and severity scoring
+
+## Run locally
+
+Requirements: Python 3.11+ and Node.js 18+.
+
+### 1. Start the backend
 
 ```bash
-# 1) Backend  (Windows: use `python -m venv .venv` then `.venv\Scripts\activate`)
 cd backend
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-python -m scripts.setup_demo          # generates simulated data + runs the whole pipeline (~1 min)
-uvicorn app.main:app --reload --port 8000
+python -m venv .venv
+```
 
-# 2) Frontend (new terminal)
+Activate the environment:
+
+```powershell
+# Windows PowerShell
+.venv\Scripts\Activate.ps1
+```
+
+```bash
+# macOS / Linux
+source .venv/bin/activate
+```
+
+Install dependencies, generate demo data, and start the API:
+
+```bash
+pip install -r requirements.txt
+python -m scripts.setup_demo
+uvicorn app.main:app --reload --port 8000
+```
+
+The API documentation is available at [http://localhost:8000/docs](http://localhost:8000/docs).
+
+### 2. Start the frontend
+
+In a second terminal:
+
+```bash
 cd frontend
 npm install
-npm run dev                           # open http://localhost:5173
+npm run dev
 ```
 
-API docs (Swagger): http://localhost:8000/docs. Dev API keys (change via `backend/.env`, see `.env.example`):
-`dev-viewer-key`, `dev-analyst-key`, `dev-admin-key`. The dashboard has a **Role** switcher in the header (what-if, acknowledge and mapping review need analyst; weights/thresholds/pipeline need admin).
+Open [http://localhost:5173](http://localhost:5173).
 
-Tests: `cd backend && pytest -q`  ·  Re-run pipeline only: `python -m scripts.run_pipeline` (idempotent; every run is versioned).
-Optional better multilingual mapping: `pip install sentence-transformers` and set `USE_EMBEDDINGS=1`.
+## Demo roles
 
-## Architecture
+The role selector is in the dashboard header.
+
+| Role | Example permissions |
+|---|---|
+| Viewer | View dashboard data |
+| Analyst | Run what-if scenarios, acknowledge alerts, and review mappings |
+| Admin | Change weights and thresholds, and run the pipeline |
+
+The development API keys are defined in `backend/.env.example`. They are for local demonstration and should be changed before any real deployment.
+
+## Dashboard pages
+
+- **Overview:** Summary metrics with drill-down from state to district and trade.
+- **Trade Explorer:** Demand and supply history, forecasts, gap charts, and demand contributors.
+- **Rankings:** Trades and locations ordered by gap severity.
+- **Early Warnings:** Alerts with severity, reasons, and suggested actions.
+- **Workbench:** Test seat changes and generate target recommendations.
+- **Methodology & Data:** Review the analysis approach, sources, and limitations.
+- **Admin:** Review uncertain job-title mappings, adjust settings, and run the pipeline.
+
+## Data flow
+
+```text
+Simulated source data
+        ↓
+Ingestion, validation, and deduplication
+        ↓
+Job-title mapping and demand index
+        ↓
+Supply estimates and forecasts
+        ↓
+Gap analysis, severity rankings, and alerts
+        ↓
+FastAPI endpoints and dashboard
 ```
-Connectors → 1 Ingestion (validate, dedup, snapshot) → 2 NLP mapping (fuzzy[+embeddings], confidence, review queue)
- → 3 Demand index (robust z, configurable weights, explainability) + supply model
- → 4 Forecast (harmonic + LightGBM ensemble, intervals, rolling backtest, reconciliation)
- → 5 Gap, severity, flags, what-if, target recommender → 6 FastAPI (RBAC, exports) → React dashboard
-                SQLite (plain SQL; Postgres-ready) + run log + audit log
+
+The pipeline creates versioned runs so forecast and export results can be traced back to their source run.
+
+## Forecasting and methodology
+
+SkillSense combines job postings, hiring signals, employment estimates, and worker registrations into a demand index. It compares estimated demand with training supply, then calculates gaps and severity scores. Forecasts use a harmonic trend baseline and a LightGBM model ensemble, with uncertainty ranges.
+
+See [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) for details and [`docs/INTEGRATION.md`](docs/INTEGRATION.md) for documented interfaces for connecting real data feeds.
+
+## Build and type check
+
+From the `frontend` directory:
+
+```bash
+npm run typecheck
+npm run build
 ```
-Code map: `backend/app/{ingestion,mapping,index,forecast,gap,pipeline,services,main}.py`, `backend/scripts/generate_data.py`, `frontend/src/pages/*`.
 
-## Requirement traceability
-| Problem-statement requirement | Module | Endpoint | Dashboard page |
-|---|---|---|---|
-| 1. Aggregate & normalise demand signals (portals, hiring, NCO/NSQF postings, e-Shram/NCS) | `ingestion.py`, `mapping.py`, `index.py` | `/meta/sources`, `/mapping/review`, `/demand-index/{d}/{t}` | Methodology & Data, Admin (review queue), Explorer (contributions) |
-| 2. Cross-reference demand with training capacity/seats by sector, trade, district | `index.py::compute_supply`, `gap.py` | `/gap` | Overview, Explorer |
-| 3. Forward-looking gap forecasts at sector & district level, refreshed periodically | `forecast.py`, `pipeline.py`, APScheduler (monthly) | `/forecast`, `/timeseries`, `/pipeline/run`, `/meta/runs` | Explorer, Admin |
-| 4. Rank trades/geographies by severity of over/undersupply | `gap.py::severity_score` | `/ranking` | Rankings |
-| 5. Interactive dashboard with national→district drill-down | React app | `/overview` | Overview (tile drill-down) |
-| Documented methodology for the combined index | `docs/METHODOLOGY.md`, in-app page | `/config/weights`, `/meta/model-quality` | Methodology & Data |
-| Early-warning flags | `gap.py::build_alerts` | `/alerts`, `/alerts/{id}/ack` | Early Warnings |
-| API/export layer for target-setting | `services.py`, `main.py` | `/export/forecast.{csv,xlsx,json}`, `/export/targets.csv`, `/whatif`, `/recommend-targets` | Rankings, Workbench |
-| Multilingual, accessible UI | `i18n.ts`, `locales/*.json`, `components/ui.tsx` | – | All pages (EN/HI/MR, contrast, text size, table view, keyboard) |
+## Known limitations
 
-## 5-minute demo script (planted scenarios)
-1. **Overview** – note the Demo banner; click *Maharashtra* → tiles by district; KPIs show EV Charging / Solar as top shortage and Consumer-Electronics Repair as top oversupply.
-2. **Early Warnings** – *Kanpur Nagar · Electrician (Domestic)*: critical APPROACHING_SATURATION (seats rising ~14%, demand flat). *Pune · Solar PV Installer*: critical ACUTE_SHORTAGE (demand surging, few seats). *Nagpur · EV Charging*: EMERGING_DEMAND.
-3. **Trade Explorer** (Pune, Solar PV Installer) – history + forecast with 80/95% bands, demand vs supply, "why this score" contribution chart, *View as table*.
-4. **Explorer → Gautam Buddh Nagar · Field Technician (Electronics)** – sudden demand jump from Apr 2026 (structural break). **Gadchiroli** – sparse data → low-confidence flags and reduced confidence. **Bahraich** – e-Shram feed missing for 12 months (weights re-normalised, lower confidence).
-5. **Workbench** – Kanpur/Electrician: slide seats −40% and watch gap/severity change; *Recommend targets* for Uttar Pradesh × Renewable with a seat budget; download target CSV.
-6. **Switch language** to हिन्दी/मराठी (alert reasons/actions are template-translated); toggle high contrast and text size.
-7. **Admin** – change source weights → index and forecasts recompute as a new versioned run; review low-confidence job titles.
-8. **Methodology** – weights, source freshness, mapping accuracy, backtest metrics and limitations.
-
-## Assumptions & known limitations (honest list)
-- Simulated data; accuracy figures describe the synthetic data only (backtest: ensemble WAPE ≈ 11% vs ≈ 15–16% seasonal-naive; interval coverage ≈ 81% / 95% on holdout origins).
-- **Deviations from the brief (for speed, per request):** SQLite instead of PostgreSQL/Alembic (schema is plain SQL in `db.py`); no Docker; harmonic damped-trend baseline instead of Prophet/statsforecast; top-down forecast-proportion reconciliation instead of MinT; fuzzy matching (RapidFuzz) by default with optional multilingual embeddings; near-duplicate detection uses string similarity (not embeddings); tile map instead of a GeoJSON choropleth (boundary files are not bundled offline); Vitest UI tests not included.
-- Model-selection weights are calibrated on origins ≤ 24 and evaluated on 27/30 (small look-ahead in selection only). Backtests are not run on the reconciled forecasts.
-- Planted "GBN Field Technician" jump (last 6 months of data) is visible in history but forecast/flag sensitivity to it is modest by design of the robust index.
-- Auth is a documented dev implementation (static API keys); use a real IdP in production. Only aggregate, non-personal data is used; actions are written to `audit_log`.
+- The included data is simulated, so reported accuracy applies only to the demo dataset.
+- Real data-feed integrations are documented but not connected.
+- Development API keys are static and are not production authentication.
+- Some geographic labels, skill codes, and assumptions are illustrative.
+- Forecasts are decision support and should be reviewed by planners.
