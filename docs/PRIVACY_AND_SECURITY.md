@@ -1,0 +1,1 @@
+Only aggregate, non-personal data is used (counts, indices, seats). Role-based access via API keys (viewer < analyst < admin), configured in `.env`; dev defaults must be changed. Config changes, alert acknowledgements, mapping decisions and pipeline runs are written to `audit_log`. Raw snapshots are stored per run under `backend/data/snapshots/`.
